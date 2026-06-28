@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata = {
   title: "Posyandu Girimulyo",
   description: "Portal informasi dan kalkulator gizi untuk pencegahan stunting.",
+  icons: {
+    icon: "/logo.webp",
+    shortcut: "/logo.webp",
+    apple: "/logo.webp",
+  },
 };
 
 export default function RootLayout({ children }) {
