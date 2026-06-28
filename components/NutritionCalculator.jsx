@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx-js-style";
 import { calculateNutritionResult, statusExplanations } from "@/lib/gizi";
+import { readJsonResponse } from "@/lib/http";
 
 const initialForm = {
   nikAnak: "",
@@ -379,7 +380,7 @@ export default function NutritionCalculator({ session }) {
 
     try {
       const response = await fetch(getHistoryUrl(historyScope, selectedHistoryMonth));
-      const payload = await response.json();
+      const payload = await readJsonResponse(response, "Respons histori dari server tidak valid.");
 
       if (!response.ok) {
         throw new Error(payload.error || "Gagal mengambil histori kalkulator.");
@@ -437,7 +438,7 @@ export default function NutritionCalculator({ session }) {
       setIsLoadingHistory(true);
       try {
         const response = await fetch(getHistoryUrl("month", nextHistoryMonth));
-        const payload = await response.json();
+        const payload = await readJsonResponse(response, "Respons histori dari server tidak valid.");
 
         if (!response.ok) {
           throw new Error(payload.error || "Gagal mengambil histori kalkulator.");
@@ -464,7 +465,7 @@ export default function NutritionCalculator({ session }) {
       setIsLoadingHistory(true);
       try {
         const response = await fetch(getHistoryUrl(nextScope, selectedHistoryMonth));
-        const payload = await response.json();
+        const payload = await readJsonResponse(response, "Respons histori dari server tidak valid.");
 
         if (!response.ok) {
           throw new Error(payload.error || "Gagal mengambil histori kalkulator.");
@@ -519,7 +520,7 @@ export default function NutritionCalculator({ session }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(lastResult),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse(response, "Respons simpan histori dari server tidak valid.");
 
       if (!response.ok) {
         throw new Error(payload.error || "Gagal menyimpan histori ke database.");
