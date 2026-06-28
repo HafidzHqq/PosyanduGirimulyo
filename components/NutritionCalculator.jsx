@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { calculateNutritionResult, statusExplanations } from "@/lib/gizi";
 
 const initialForm = {
@@ -15,23 +15,75 @@ const initialForm = {
   tinggi: "",
 };
 
+const posyanduOptions = Array.from({ length: 6 }, (_, index) => `Plamboyan ${index + 1}`);
+
 function getTodayDate() {
   return new Date().toISOString().split("T")[0];
 }
 
+function getCurrentMonth() {
+  return getTodayDate().slice(0, 7);
+}
+
+function formatMonthYear(value) {
+  if (!value) return "-";
+  const [year, month] = String(value).split("-").map(Number);
+  if (!year || !month) return value;
+
+  return new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+}
+
+function formatDisplayDate(value) {
+  if (!value) return "-";
+  const [year, month, day] = String(value).split("-").map(Number);
+  if (!year || !month || !day) return value;
+
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(year, month - 1, day));
+}
+
+function getHistoryMonthOptions(totalMonths = 36) {
+  const today = new Date();
+
+  return Array.from({ length: totalMonths }, (_, index) => {
+    const date = new Date(today.getFullYear(), today.getMonth() - index, 1);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+    return {
+      value,
+      label: formatMonthYear(value),
+    };
+  });
+}
+
 const resultCards = [
-  { key: "wfa", title: "BB/U" },
-  { key: "hfa", title: "TB/U" },
-  { key: "wfh", title: "BB/TB" },
-  { key: "bmifa", title: "IMT/U" },
+  {
+    key: "wfa",
+    title: "Berat Badan menurut Umur",
+    subtitle: "Menilai apakah berat badan anak sesuai dengan usianya.",
+  },
+  {
+    key: "hfa",
+    title: "Tinggi Badan menurut Umur",
+    subtitle: "Indikator utama untuk melihat risiko stunting.",
+  },
+  {
+    key: "wfh",
+    title: "Berat Badan menurut Tinggi Badan",
+    subtitle: "Menilai apakah berat badan anak proporsional dengan tinggi badannya.",
+  },
+  {
+    key: "bmifa",
+    title: "Indeks Massa Tubuh menurut Umur",
+    subtitle: "Membantu melihat risiko kurus atau gemuk berdasarkan usia.",
+  },
 ];
 
 const fieldClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-sans text-base text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-4 focus:ring-primary/15";
+  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-sans text-base text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 hover:border-primary/30 focus:border-primary focus:ring-4 focus:ring-primary/15";
 const labelClass = "mb-2 block text-sm font-semibold text-slate-700";
 const buttonBase =
-  "my-2 mr-1 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border-0 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-primary/20 sm:px-7 sm:py-3.5 sm:text-base";
-const tableCellClass = "border-b border-slate-200 px-3 py-3 text-left";
+  "my-2 mr-1 inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-0 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-primary/20 sm:px-7 sm:py-3.5 sm:text-base";
+const tableCellClass = "border-b border-slate-200 px-3 py-3 text-left align-middle";
 
 const statusStyles = {
   normal: "bg-primaryLight/50 text-primaryDark",
@@ -39,8 +91,37 @@ const statusStyles = {
   danger: "bg-red-100 text-red-800",
 };
 
+function parseDecimalInput(value) {
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return Number.NaN;
+
+  const normalized = value.trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return Number.NaN;
+
+  return Number(normalized);
+}
+
 function getStatusClass(result) {
   return statusStyles[result.level] || "bg-neutral-100 text-neutral-700";
+}
+
+function getResultExplanation(result) {
+  if (!result) return "";
+
+  const status = result.text.toLowerCase();
+  if (status.includes("normal") || status.includes("baik")) {
+    return "Hasil berada pada rentang yang sesuai. Tetap lanjutkan pemantauan rutin di Posyandu.";
+  }
+
+  if (status.includes("pendek") || status.includes("kurang") || status.includes("kurus") || status.includes("buruk")) {
+    return "Hasil perlu diperhatikan. Lakukan pemantauan ulang dan konsultasikan dengan kader atau tenaga kesehatan.";
+  }
+
+  if (status.includes("lebih") || status.includes("gemuk") || status.includes("obesitas")) {
+    return "Hasil menunjukkan kecenderungan berlebih. Perhatikan pola makan, aktivitas, dan lakukan pemantauan rutin.";
+  }
+
+  return "Gunakan hasil ini sebagai bahan pemantauan, bukan diagnosis tunggal.";
 }
 
 function Notification({ notification }) {
@@ -52,6 +133,35 @@ function Notification({ notification }) {
       : "border-red-500 bg-red-50 text-red-900";
 
   return <div className={`mb-5 rounded-lg border-l-4 px-5 py-4 font-medium ${colorClass}`}>{notification.message}</div>;
+}
+
+function FormSection({ title, description, icon, children }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-sm">
+          <i className={`fa-solid ${icon}`} aria-hidden="true" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-ink">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function CalculatorStat({ icon, label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/30 bg-white/15 px-4 py-3 text-white shadow-sm backdrop-blur">
+      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/18">
+        <i className={`fa-solid ${icon}`} aria-hidden="true" />
+      </div>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/75">{label}</p>
+      <p className="mt-1 text-lg font-bold leading-tight">{value}</p>
+    </div>
+  );
 }
 
 function StatusBadge({ result }) {
@@ -71,6 +181,7 @@ function StatusBadge({ result }) {
 function makeExcelRows(result) {
   return [
     [
+      "Posyandu",
       "NIK Anak",
       "Tanggal Sesi",
       "Nama Anak",
@@ -84,18 +195,19 @@ function makeExcelRows(result) {
       "Tinggi (cm)",
       "IMT",
       "Kesimpulan Stunting",
-      "BB/U (Z)",
-      "Status BB/U",
-      "TB/U (Z)",
-      "Status TB/U",
-      "BB/TB (Z)",
-      "Status BB/TB",
-      "IMT/U (Z)",
-      "Status IMT/U",
+      "Berat Badan menurut Umur (Z-score)",
+      "Status Berat Badan menurut Umur",
+      "Tinggi Badan menurut Umur (Z-score)",
+      "Status Tinggi Badan menurut Umur",
+      "Berat Badan menurut Tinggi Badan (Z-score)",
+      "Status Berat Badan menurut Tinggi Badan",
+      "Indeks Massa Tubuh menurut Umur (Z-score)",
+      "Status Indeks Massa Tubuh menurut Umur",
     ],
     [
+      result.posyanduName,
       result.nikAnak,
-      result.sessionDate,
+      formatDisplayDate(result.sessionDate),
       result.namaAnak,
       result.nikIbu,
       result.namaIbu,
@@ -119,9 +231,56 @@ function makeExcelRows(result) {
   ];
 }
 
+function getColumnWidths(rows) {
+  if (rows.length === 0) return [];
+
+  return rows[0].map((_, columnIndex) => {
+    const longestValue = rows.reduce((longest, row) => {
+      const value = row[columnIndex] ?? "";
+      return Math.max(longest, String(value).length);
+    }, 0);
+
+    return { wch: Math.min(Math.max(longestValue + 3, 10), 36) };
+  });
+}
+
+function styleWorksheetAsTable(worksheet, rows) {
+  const range = XLSX.utils.decode_range(worksheet["!ref"]);
+  const borderStyle = {
+    top: { style: "thin", color: { rgb: "CBD5E1" } },
+    right: { style: "thin", color: { rgb: "CBD5E1" } },
+    bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+    left: { style: "thin", color: { rgb: "CBD5E1" } },
+  };
+
+  worksheet["!cols"] = getColumnWidths(rows);
+  worksheet["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
+
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    for (let column = range.s.c; column <= range.e.c; column += 1) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: column });
+      const cell = worksheet[cellAddress];
+      if (!cell) continue;
+
+      cell.s = {
+        border: borderStyle,
+        alignment: { vertical: "center", wrapText: true },
+        ...(row === 0
+          ? {
+              fill: { fgColor: { rgb: "1D9E75" } },
+              font: { bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            }
+          : {}),
+      };
+    }
+  }
+}
+
 function writeWorkbook(rows, sheetName, filename) {
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
+  styleWorksheetAsTable(worksheet, rows);
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   XLSX.writeFile(workbook, filename);
 }
@@ -129,6 +288,8 @@ function writeWorkbook(rows, sheetName, filename) {
 function validateFormData(formData) {
   const hasNumber = /\d/;
   const nikPattern = /^\d{16}$/;
+  const berat = parseDecimalInput(formData.berat);
+  const tinggi = parseDecimalInput(formData.tinggi);
 
   if (!formData.namaAnak || !formData.nikIbu || !formData.jenisKelamin || !formData.tanggalLahir || !formData.berat || !formData.tinggi) {
     return "Mohon lengkapi semua field yang wajib diisi.";
@@ -150,13 +311,24 @@ function validateFormData(formData) {
     return "NIK ibu wajib berisi angka saja dan tepat 16 digit.";
   }
 
+  if (!Number.isFinite(berat) || berat <= 0 || berat > 300) {
+    return "Berat badan harus berupa angka valid, contoh 12.5 atau 12,5.";
+  }
+
+  if (!Number.isFinite(tinggi) || tinggi <= 0 || tinggi > 250) {
+    return "Tinggi badan harus berupa angka valid, contoh 85.5 atau 85,5.";
+  }
+
   return "";
 }
 
-export default function NutritionCalculator() {
+export default function NutritionCalculator({ session }) {
   const [formData, setFormData] = useState(initialForm);
   const [selectedSessionDate, setSelectedSessionDate] = useState(getTodayDate);
-  const [historyScope, setHistoryScope] = useState("session");
+  const [selectedPosyandu, setSelectedPosyandu] = useState(session?.role === "admin" ? "Plamboyan 1" : session?.posyanduName || "Plamboyan 1");
+  const [selectedHistoryMonth, setSelectedHistoryMonth] = useState(getCurrentMonth);
+  const [historyScope, setHistoryScope] = useState("month");
+  const [historySearch, setHistorySearch] = useState("");
   const [lastResult, setLastResult] = useState(null);
   const [reportData, setReportData] = useState([]);
   const [notification, setNotification] = useState(null);
@@ -176,23 +348,37 @@ export default function NutritionCalculator() {
     return Number(lastResult.hfa.z) < -2;
   }, [lastResult]);
 
+  const filteredReportData = useMemo(() => {
+    const keyword = historySearch.trim().toLowerCase();
+    if (!keyword) return reportData;
+
+    return reportData.filter((data) => data.namaAnak?.toLowerCase().includes(keyword));
+  }, [historySearch, reportData]);
+
+  const historyMonthOptions = useMemo(() => {
+    const options = getHistoryMonthOptions();
+    if (options.some((option) => option.value === selectedHistoryMonth)) return options;
+
+    return [{ value: selectedHistoryMonth, label: formatMonthYear(selectedHistoryMonth) }, ...options];
+  }, [selectedHistoryMonth]);
+
   function showNotification(message, type) {
     setNotification({ message, type });
   }
 
-  const getHistoryUrl = useCallback((scope = historyScope, sessionDate = selectedSessionDate) => {
+  const getHistoryUrl = useCallback((scope = historyScope, historyMonth = selectedHistoryMonth) => {
     if (scope === "all") {
       return "/api/nutrition-history?scope=all";
     }
 
-    return `/api/nutrition-history?sessionDate=${encodeURIComponent(sessionDate)}`;
-  }, [historyScope, selectedSessionDate]);
+    return `/api/nutrition-history?month=${encodeURIComponent(historyMonth)}`;
+  }, [historyScope, selectedHistoryMonth]);
 
   const loadHistory = useCallback(async () => {
     setIsLoadingHistory(true);
 
     try {
-      const response = await fetch(getHistoryUrl(historyScope, selectedSessionDate));
+      const response = await fetch(getHistoryUrl(historyScope, selectedHistoryMonth));
       const payload = await response.json();
 
       if (!response.ok) {
@@ -206,7 +392,7 @@ export default function NutritionCalculator() {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [getHistoryUrl, historyScope, selectedSessionDate]);
+  }, [getHistoryUrl, historyScope, selectedHistoryMonth]);
 
   async function toggleHistory() {
     const nextVisible = !isHistoryVisible;
@@ -222,23 +408,35 @@ export default function NutritionCalculator() {
     setFormData((current) => ({ ...current, [name]: value }));
   }
 
+  function updateHistorySearch(event) {
+    setHistorySearch(event.target.value);
+  }
+
   function resetForm() {
     setFormData(initialForm);
   }
 
-  async function changeSessionDate(event) {
-    const nextSessionDate = event.target.value;
-    setSelectedSessionDate(nextSessionDate);
+  function changeSessionDate(event) {
+    setSelectedSessionDate(event.target.value);
+  }
 
-    if (historyScope === "session") {
+  function changeSelectedPosyandu(event) {
+    setSelectedPosyandu(event.target.value);
+  }
+
+  async function changeHistoryMonth(event) {
+    const nextHistoryMonth = event.target.value;
+    setSelectedHistoryMonth(nextHistoryMonth);
+
+    if (historyScope === "month") {
       setReportData([]);
       setHasLoadedHistory(false);
     }
 
-    if (isHistoryVisible && historyScope === "session") {
+    if (isHistoryVisible && historyScope === "month") {
       setIsLoadingHistory(true);
       try {
-        const response = await fetch(getHistoryUrl("session", nextSessionDate));
+        const response = await fetch(getHistoryUrl("month", nextHistoryMonth));
         const payload = await response.json();
 
         if (!response.ok) {
@@ -265,7 +463,7 @@ export default function NutritionCalculator() {
     if (isHistoryVisible) {
       setIsLoadingHistory(true);
       try {
-        const response = await fetch(getHistoryUrl(nextScope, selectedSessionDate));
+        const response = await fetch(getHistoryUrl(nextScope, selectedHistoryMonth));
         const payload = await response.json();
 
         if (!response.ok) {
@@ -291,15 +489,20 @@ export default function NutritionCalculator() {
       return;
     }
 
-    const result = calculateNutritionResult({
-      ...formData,
-      sessionDate: selectedSessionDate,
-      berat: Number(formData.berat),
-      tinggi: Number(formData.tinggi),
-    });
+    try {
+      const result = calculateNutritionResult({
+        ...formData,
+        posyanduName: selectedPosyandu,
+        sessionDate: selectedSessionDate,
+        berat: parseDecimalInput(formData.berat),
+        tinggi: parseDecimalInput(formData.tinggi),
+      });
 
-    setLastResult(result);
-    showNotification("Analisis status gizi berhasil!", "success");
+      setLastResult(result);
+      showNotification("Analisis status gizi berhasil!", "success");
+    } catch (error) {
+      showNotification(error.message, "error");
+    }
   }
 
   async function addToReport() {
@@ -323,7 +526,7 @@ export default function NutritionCalculator() {
       }
 
       const shouldAppendToCurrentHistory =
-        historyScope === "all" || (historyScope === "session" && payload.data.sessionDate === selectedSessionDate);
+        historyScope === "all" || (historyScope === "month" && payload.data.sessionDate?.startsWith(selectedHistoryMonth));
       const nextReportData = shouldAppendToCurrentHistory ? [payload.data, ...reportData] : reportData;
 
       if (shouldAppendToCurrentHistory) {
@@ -338,34 +541,6 @@ export default function NutritionCalculator() {
       showNotification(error.message, "error");
     } finally {
       setIsSavingHistory(false);
-    }
-  }
-
-  async function clearReport() {
-    if (historyScope === "all") {
-      showNotification("Mode semua histori hanya untuk melihat dan mengunduh. Pilih sesi tanggal tertentu untuk menghapus data.", "error");
-      return;
-    }
-
-    if (reportData.length === 0) {
-      showNotification("Laporan sudah kosong.", "error");
-      return;
-    }
-
-    if (window.confirm(`Apakah Anda yakin ingin menghapus semua histori sesi ${selectedSessionDate}? Aksi ini tidak dapat dibatalkan.`)) {
-      try {
-        const response = await fetch(`/api/nutrition-history?sessionDate=${encodeURIComponent(selectedSessionDate)}`, { method: "DELETE" });
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload.error || "Gagal menghapus histori dari database.");
-        }
-
-        setReportData([]);
-        showNotification("Semua data histori telah berhasil dihapus dari database.", "success");
-      } catch (error) {
-        showNotification(error.message, "error");
-      }
     }
   }
 
@@ -384,13 +559,14 @@ export default function NutritionCalculator() {
   }
 
   function downloadReport() {
-    if (reportData.length === 0) {
+    if (filteredReportData.length === 0) {
       showNotification("Belum ada data untuk diunduh.", "error");
       return;
     }
 
     const headers = [
       "No",
+      "Posyandu",
       "Tanggal Sesi",
       "NIK Anak",
       "Nama Anak",
@@ -404,18 +580,19 @@ export default function NutritionCalculator() {
       "Tinggi (cm)",
       "IMT",
       "Kesimpulan Stunting",
-      "BB/U (Z)",
-      "Status BB/U",
-      "TB/U (Z)",
-      "Status TB/U",
-      "BB/TB (Z)",
-      "Status BB/TB",
-      "IMT/U (Z)",
-      "Status IMT/U",
+      "Berat Badan menurut Umur (Z-score)",
+      "Status Berat Badan menurut Umur",
+      "Tinggi Badan menurut Umur (Z-score)",
+      "Status Tinggi Badan menurut Umur",
+      "Berat Badan menurut Tinggi Badan (Z-score)",
+      "Status Berat Badan menurut Tinggi Badan",
+      "Indeks Massa Tubuh menurut Umur (Z-score)",
+      "Status Indeks Massa Tubuh menurut Umur",
     ];
-    const rows = reportData.map((data, index) => [
+    const rows = filteredReportData.map((data, index) => [
       index + 1,
-      data.sessionDate,
+      data.posyanduName || "-",
+      formatDisplayDate(data.sessionDate),
       data.nikAnak,
       data.namaAnak,
       data.nikIbu,
@@ -441,40 +618,79 @@ export default function NutritionCalculator() {
     writeWorkbook(
       [headers, ...rows],
       "Laporan Gizi",
-      historyScope === "all" ? `Laporan_Gizi_Semua_Histori_${getTodayDate()}.xlsx` : `Laporan_Gizi_Sesi_${selectedSessionDate}.xlsx`,
+      historyScope === "all" ? `Laporan_Gizi_Semua_Histori_${getTodayDate()}.xlsx` : `Laporan_Gizi_Bulan_${selectedHistoryMonth}.xlsx`,
     );
     showNotification("Laporan berhasil diunduh!", "success");
   }
 
   return (
-    <main className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft sm:mt-7">
-      <section className="border-b border-slate-200 bg-slate-50 px-4 py-6 sm:px-7 sm:py-8">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Kalkulator Posyandu</p>
-        <h2 className="max-w-3xl text-2xl font-bold leading-tight text-ink sm:text-4xl">
-          Kalkulator Status Gizi Anak
-        </h2>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-          Masukkan data anak, hitung status gizi, lalu simpan hasil ke database atau unduh laporan Excel.
-        </p>
+    <main className="mt-5 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-soft sm:mt-7">
+      <section className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-br from-primary via-primaryDark to-secondary px-4 py-7 text-white sm:px-7 sm:py-9">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/12" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-28 w-full bg-gradient-to-t from-black/15 to-transparent" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primaryLight">Kalkulator Posyandu</p>
+            <h2 className="max-w-3xl text-2xl font-bold leading-tight text-ink sm:text-4xl">
+              Kalkulator Status Gizi Anak
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/85 sm:text-base">
+              Catat data anak, hitung status gizi berdasarkan umur dalam bulan, lalu simpan hasilnya ke histori Posyandu.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+            <CalculatorStat icon="fa-location-dot" label="Lokasi" value={session?.role === "admin" ? "Plamboyan" : selectedPosyandu} />
+            <CalculatorStat icon="fa-calendar-days" label="Sesi" value={formatDisplayDate(selectedSessionDate)} />
+            <CalculatorStat icon="fa-database" label="Histori" value={hasLoadedHistory ? `${reportData.length} data` : "Siap"} />
+          </div>
+        </div>
       </section>
 
-      <section className="px-4 py-5 sm:px-7 sm:py-7">
+      <section className="bg-gradient-to-br from-muted/65 via-white to-secondaryLight/20 px-4 py-5 sm:px-7 sm:py-7">
 
       <Notification notification={notification} />
 
-      <form className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5" noValidate onSubmit={handleSubmit}>
-        <div className="mb-5">
-          <label className={labelClass} htmlFor="sessionDate">Tanggal Sesi Posyandu</label>
-          <input
-            className={fieldClass}
-            id="sessionDate"
-            type="date"
-            value={selectedSessionDate}
-            onChange={changeSessionDate}
-          />
-        </div>
+      <form className="grid gap-5" noValidate onSubmit={handleSubmit}>
+        <FormSection
+          description="Pilih tanggal sesi dan tempat Posyandu sebelum memasukkan data anak."
+          icon="fa-calendar-check"
+          title="Sesi Pemeriksaan"
+        >
+        <div className="grid gap-5 md:grid-cols-2">
+          <div>
+            <label className={labelClass} htmlFor="sessionDate">Tanggal Sesi Posyandu</label>
+            <input
+              className={fieldClass}
+              id="sessionDate"
+              type="date"
+              value={selectedSessionDate}
+              onChange={changeSessionDate}
+            />
+          </div>
 
-        <div className="mb-5 grid gap-5 md:grid-cols-2">
+          <div>
+            <label className={labelClass} htmlFor="posyanduName">Tempat Posyandu</label>
+            {session?.role === "admin" ? (
+              <select className={fieldClass} id="posyanduName" value={selectedPosyandu} onChange={changeSelectedPosyandu}>
+                {posyanduOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="rounded-xl border border-primary/15 bg-primaryLight/25 px-4 py-3 font-semibold text-primary">
+                {selectedPosyandu}
+              </div>
+            )}
+          </div>
+        </div>
+        </FormSection>
+
+        <FormSection
+          description="Gunakan nama tanpa angka dan NIK 16 digit agar data histori mudah dicari."
+          icon="fa-id-card"
+          title="Identitas Anak dan Ibu"
+        >
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="nikAnak">NIK Anak (Opsional)</label>
             <input
@@ -513,8 +729,14 @@ export default function NutritionCalculator() {
             <input className={fieldClass} id="namaIbu" name="namaIbu" placeholder="Nama tanpa angka" type="text" value={formData.namaIbu} onChange={updateField} />
           </div>
         </div>
+        </FormSection>
 
-        <div className="mb-5 grid gap-5 md:grid-cols-2">
+        <FormSection
+          description="Data umur dihitung dari tanggal lahir dalam satuan bulan agar hasil tidak NaN."
+          icon="fa-child-reaching"
+          title="Data Anak"
+        >
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="jenisKelamin">Jenis Kelamin</label>
             <select className={fieldClass} id="jenisKelamin" name="jenisKelamin" value={formData.jenisKelamin} onChange={updateField}>
@@ -529,29 +751,59 @@ export default function NutritionCalculator() {
             <input className={fieldClass} id="tanggalLahir" name="tanggalLahir" type="date" value={formData.tanggalLahir} onChange={updateField} />
           </div>
         </div>
+        </FormSection>
 
-        <div className="mb-5 grid gap-5 md:grid-cols-2">
+        <FormSection
+          description="Angka desimal boleh memakai titik atau koma, contoh 12,5 kg dan 85,5 cm."
+          icon="fa-ruler-combined"
+          title="Pengukuran Antropometri"
+        >
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="berat">Berat Badan (kg)</label>
-            <input className={fieldClass} id="berat" name="berat" step="0.1" type="number" value={formData.berat} onChange={updateField} />
+            <input
+              className={fieldClass}
+              id="berat"
+              inputMode="decimal"
+              name="berat"
+              placeholder="Contoh: 12,5"
+              type="text"
+              value={formData.berat}
+              onChange={updateField}
+            />
           </div>
 
           <div>
             <label className={labelClass} htmlFor="tinggi">Tinggi Badan (cm)</label>
-            <input className={fieldClass} id="tinggi" name="tinggi" step="0.1" type="number" value={formData.tinggi} onChange={updateField} />
+            <input
+              className={fieldClass}
+              id="tinggi"
+              inputMode="decimal"
+              name="tinggi"
+              placeholder="Contoh: 85,5"
+              type="text"
+              value={formData.tinggi}
+              onChange={updateField}
+            />
           </div>
         </div>
+        </FormSection>
 
-        <button className={`${buttonBase} bg-primary hover:bg-primaryDark`} type="submit">
-          <i className="fa-solid fa-calculator text-lg" aria-hidden="true" />
-          Hitung Status Gizi
-        </button>
+        <div className="flex flex-col gap-3 rounded-3xl border border-primary/15 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-600">
+            Pastikan data sudah benar sebelum menghitung. Hasil dapat disimpan ke database setelah analisis muncul.
+          </p>
+          <button className={`${buttonBase} m-0 bg-gradient-to-r from-primary to-secondary`} type="submit">
+            <i className="fa-solid fa-calculator text-lg" aria-hidden="true" />
+            Hitung Status Gizi
+          </button>
+        </div>
       </form>
 
       {lastResult && (
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white px-4 py-6 shadow-card sm:px-5 sm:py-8">
+        <div className="mt-8 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-card">
           <div
-            className={`mb-5 rounded-2xl border p-4 text-center text-xl font-bold sm:text-2xl ${
+            className={`border-b p-5 text-center text-xl font-bold sm:text-2xl ${
               isStunted ? "border-red-200 bg-red-50 text-red-900" : "border-green-200 bg-green-50 text-green-900"
             }`}
           >
@@ -559,20 +811,28 @@ export default function NutritionCalculator() {
             {isStunted ? " TERINDIKASI STUNTING" : " TIDAK TERINDIKASI STUNTING"}
           </div>
 
+          <div className="px-4 py-6 sm:px-5 sm:py-8">
           <h3 className="mb-5 text-center text-lg font-bold text-ink sm:text-xl">Hasil Analisis untuk {lastResult.namaAnak}</h3>
-          <div className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-2 sm:p-5">
-            <div className="border-b border-dashed border-slate-200 pb-2 text-sm text-slate-600"><strong className="block text-slate-800">Nama Ibu:</strong> {lastResult.namaIbu}</div>
-            <div className="border-b border-dashed border-slate-200 pb-2 text-sm text-slate-600"><strong className="block text-slate-800">Usia Anak:</strong> {lastResult.ageFormatted}</div>
-            <div className="border-b border-dashed border-slate-200 pb-2 text-sm text-slate-600"><strong className="block text-slate-800">Tinggi Badan:</strong> {lastResult.tinggi} cm</div>
-            <div className="border-b border-dashed border-slate-200 pb-2 text-sm text-slate-600"><strong className="block text-slate-800">Berat Badan:</strong> {lastResult.berat} kg</div>
+          <div className="mb-6 grid gap-3 rounded-3xl border border-slate-200 bg-gradient-to-br from-muted/70 via-white to-primaryLight/25 p-4 sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">Nama Ibu</strong> {lastResult.namaIbu || "-"}</div>
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">Tempat Posyandu</strong> {lastResult.posyanduName}</div>
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">Usia Anak</strong> {lastResult.ageFormatted}</div>
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">Tinggi Badan</strong> {lastResult.tinggi} cm</div>
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">Berat Badan</strong> {lastResult.berat} kg</div>
+            <div className="rounded-2xl bg-white/80 p-3 text-sm text-slate-600 shadow-sm"><strong className="block text-slate-800">IMT</strong> {lastResult.imt}</div>
           </div>
 
           <div className="mb-6 grid gap-4 md:grid-cols-2">
             {resultCards.map((card) => (
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm" key={card.key}>
-                <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-primary">{card.title}</div>
+              <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-muted/70 p-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-card" key={card.key}>
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primaryLight text-primary ring-1 ring-primaryLight">
+                  <i className="fa-solid fa-chart-simple" aria-hidden="true" />
+                </div>
+                <div className="mb-2 text-sm font-semibold text-primary">{card.title}</div>
+                <p className="mx-auto mb-3 max-w-sm text-xs leading-5 text-slate-500">{card.subtitle}</p>
                 <div className="mb-2 text-3xl font-bold text-slate-900">{lastResult[card.key].z} SD</div>
                 <StatusBadge result={lastResult[card.key]} />
+                <p className="mt-3 text-xs leading-5 text-slate-600">{getResultExplanation(lastResult[card.key])}</p>
               </div>
             ))}
           </div>
@@ -587,19 +847,19 @@ export default function NutritionCalculator() {
               Simpan Hasil Ini (Excel)
             </button>
           </div>
+          </div>
         </div>
       )}
 
-      <div className="mt-10 rounded-2xl border border-slate-200 bg-white px-4 py-5 shadow-card sm:px-5">
+      <div className="mt-10 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-card">
+        <div className="bg-gradient-to-r from-primary/10 via-white to-secondaryLight/45 px-4 py-5 sm:px-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold leading-tight text-slate-900">
-              Histori Kalkulator{hasLoadedHistory ? ` (${reportData.length} data)` : ""}
+              Histori Kalkulator{hasLoadedHistory ? ` (${filteredReportData.length}/${reportData.length} data)` : ""}
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {historyScope === "all"
-                ? "Menampilkan seluruh histori kalkulator yang tersimpan di database."
-                : `Histori yang tampil dan diunduh hanya untuk sesi tanggal ${selectedSessionDate}.`}
+              {session?.role === "admin" ? "Admin dapat melihat seluruh data Plamboyan." : `Data yang tampil hanya untuk ${session?.posyanduName}.`}
             </p>
           </div>
           <button
@@ -611,32 +871,48 @@ export default function NutritionCalculator() {
             {isHistoryVisible ? "Sembunyikan Histori" : "Lihat Histori"}
           </button>
         </div>
+        </div>
 
         {isHistoryVisible && (
-          <div className="mt-6 border-t border-slate-200 pt-6">
-            <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="inline-flex w-full rounded-xl bg-white p-1 shadow-sm sm:w-auto">
-                <button
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition sm:flex-none ${
-                    historyScope === "session" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                  type="button"
-                  onClick={() => changeHistoryScope("session")}
-                >
-                  Sesi Ini
-                </button>
-                <button
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition sm:flex-none ${
-                    historyScope === "all" ? "bg-primary text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                  type="button"
-                  onClick={() => changeHistoryScope("all")}
-                >
-                  Semua Histori
-                </button>
+          <div className="border-t border-slate-200 p-4 sm:p-5">
+            <div className="mb-5 grid gap-4 rounded-3xl border border-slate-200 bg-slate-50/85 p-4 md:grid-cols-[220px_220px_1fr]">
+              <div>
+                <label className={labelClass} htmlFor="historyScope">Periode</label>
+                <select className={fieldClass} id="historyScope" value={historyScope} onChange={(event) => changeHistoryScope(event.target.value)}>
+                  <option value="month">Bulan tertentu</option>
+                  <option value="all">Semua bulan</option>
+                </select>
               </div>
-              <div className="text-sm font-medium text-slate-600">
-                {historyScope === "all" ? "Semua tanggal sesi" : `Sesi: ${selectedSessionDate}`}
+              <div>
+                <label className={labelClass} htmlFor="historyMonth">Bulan</label>
+                <select
+                  className={fieldClass}
+                  disabled={historyScope === "all"}
+                  id="historyMonth"
+                  value={selectedHistoryMonth}
+                  onChange={changeHistoryMonth}
+                >
+                  {historyMonthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="historySearch">Cari Nama Anak</label>
+                <div className="relative">
+                  <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                  <input
+                  className={`${fieldClass} pl-11`}
+                  id="historySearch"
+                  name="historySearch"
+                  placeholder="Ketik nama anak"
+                  type="search"
+                  value={historySearch}
+                  onChange={updateHistorySearch}
+                />
+                </div>
               </div>
             </div>
 
@@ -652,32 +928,40 @@ export default function NutritionCalculator() {
               </div>
             )}
 
-            {!isLoadingHistory && reportData.length > 0 && (
+            {!isLoadingHistory && reportData.length > 0 && filteredReportData.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
+                Tidak ada histori dengan nama tersebut.
+              </div>
+            )}
+
+            {!isLoadingHistory && filteredReportData.length > 0 && (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow">
+                <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full bg-white text-sm">
                     <thead>
-                      <tr className="bg-primary text-white">
+                      <tr className="bg-gradient-to-r from-primary to-secondary text-white">
                         <th className={tableCellClass}>No</th>
+                        <th className={tableCellClass}>Posyandu</th>
                         <th className={tableCellClass}>Tanggal Sesi</th>
                         <th className={tableCellClass}>Nama Anak</th>
                         <th className={tableCellClass}>Usia</th>
                         <th className={tableCellClass}>Kesimpulan</th>
-                        <th className={tableCellClass}>BB/U (Z)</th>
+                        <th className={tableCellClass}>Berat menurut Umur</th>
                         <th className={tableCellClass}>Status</th>
-                        <th className={tableCellClass}>TB/U (Z)</th>
+                        <th className={tableCellClass}>Tinggi menurut Umur</th>
                         <th className={tableCellClass}>Status</th>
-                        <th className={tableCellClass}>BB/TB (Z)</th>
+                        <th className={tableCellClass}>Berat menurut Tinggi</th>
                         <th className={tableCellClass}>Status</th>
-                        <th className={tableCellClass}>IMT/U (Z)</th>
+                        <th className={tableCellClass}>IMT menurut Umur</th>
                         <th className={tableCellClass}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {reportData.map((data, index) => (
-                        <tr className="hover:bg-slate-50" key={data.id || `${data.namaAnak}-${data.tanggalLahir}-${index}`}>
+                      {filteredReportData.map((data, index) => (
+                        <tr className="transition hover:bg-primaryLight/20" key={data.id || `${data.namaAnak}-${data.tanggalLahir}-${index}`}>
                           <td className={tableCellClass}>{index + 1}</td>
-                          <td className={tableCellClass}>{data.sessionDate || "-"}</td>
+                          <td className={tableCellClass}>{data.posyanduName || "-"}</td>
+                          <td className={tableCellClass}>{formatDisplayDate(data.sessionDate)}</td>
                           <td className={tableCellClass}>{data.namaAnak}</td>
                           <td className={tableCellClass}>{data.ageFormatted}</td>
                           <td className={tableCellClass}>{data.stuntingConclusion}</td>
@@ -697,14 +981,8 @@ export default function NutritionCalculator() {
 
                 <button className={`${buttonBase} bg-health hover:bg-primaryDark`} type="button" onClick={downloadReport}>
                   <i className="fa-solid fa-download text-lg" aria-hidden="true" />
-                  {historyScope === "all" ? "Download Semua Histori (Excel)" : "Download Histori Sesi Ini (Excel)"}
+                  {historyScope === "all" ? "Download Semua History" : "Download History"}
                 </button>
-                {historyScope === "session" && (
-                  <button className={`${buttonBase} bg-danger hover:bg-red-700`} type="button" onClick={clearReport}>
-                    <i className="fa-solid fa-trash text-lg" aria-hidden="true" />
-                    Hapus Histori Sesi Ini
-                  </button>
-                )}
               </>
             )}
           </div>

@@ -10,6 +10,7 @@ export default function LogoutButton() {
   async function handleLogout() {
     setIsLoading(true);
     await fetch("/api/logout", { method: "POST" });
+    window.dispatchEvent(new Event("posyandu-auth-change"));
     router.refresh();
   }
 

@@ -1,26 +1,110 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { isAuthenticated } from "@/lib/auth";
+import { getAuthSession } from "@/lib/auth";
 import { ensureNutritionHistoryTable } from "@/lib/nutritionHistoryTable";
 import { query } from "@/lib/db";
+import { calculateNutritionResult } from "@/lib/gizi";
 
 export const runtime = "nodejs";
 
+function parseJsonValue(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function toDateOnly(value) {
+  if (!value) return value;
+  if (typeof value === "string") return value.split("T")[0];
+  if (value instanceof Date) return value.toISOString().split("T")[0];
+
+  return value;
+}
+
 function normalizeHistoryRow(row) {
-  return {
-    ...row.result_json,
+  const resultJson = parseJsonValue(row.result_json);
+  const baseResult = {
+    ...resultJson,
     id: row.id,
-    sessionDate: row.result_json?.sessionDate || row.session_date,
+    posyanduName: resultJson.posyanduName || row.posyandu_name,
+    sessionDate: toDateOnly(resultJson.sessionDate || row.session_date),
     createdAt: row.created_at,
+  };
+
+  try {
+    const recalculatedResult = calculateNutritionResult({
+      ...baseResult,
+      berat: parseDecimalValue(baseResult.berat),
+      tinggi: parseDecimalValue(baseResult.tinggi),
+    });
+
+    return {
+      ...recalculatedResult,
+      id: row.id,
+      posyanduName: baseResult.posyanduName,
+      createdAt: row.created_at,
+    };
+  } catch {
+    return baseResult;
+  }
+}
+
+function parseDecimalValue(value) {
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return Number.NaN;
+
+  const normalized = value.trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return Number.NaN;
+
+  return Number(normalized);
+}
+
+function getMonthRange(monthValue) {
+  if (!/^\d{4}-\d{2}$/.test(monthValue || "")) {
+    throw new Error("Format bulan histori tidak valid.");
+  }
+
+  const [year, month] = monthValue.split("-").map(Number);
+  const startDate = `${monthValue}-01`;
+  const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+  return { startDate, nextMonth };
+}
+
+function normalizeResult(result) {
+  const berat = parseDecimalValue(result.berat);
+  const tinggi = parseDecimalValue(result.tinggi);
+  const imt = result.imt == null ? null : parseDecimalValue(result.imt);
+
+  if (!Number.isFinite(berat) || berat <= 0 || berat > 300) {
+    throw new Error("Berat badan harus berupa angka valid.");
+  }
+
+  if (!Number.isFinite(tinggi) || tinggi <= 0 || tinggi > 250) {
+    throw new Error("Tinggi badan harus berupa angka valid.");
+  }
+
+  return {
+    ...result,
+    berat,
+    tinggi,
+    imt: Number.isFinite(imt) ? imt : null,
   };
 }
 
-function buildInsertParams(result) {
+function buildInsertParams(result, session) {
   const isStunted = result.isStunted ?? Number(result.hfa?.z) < -2;
   const stuntingConclusion = result.stuntingConclusion || (isStunted ? "TERINDIKASI STUNTING" : "TIDAK TERINDIKASI STUNTING");
   const sessionDate = result.sessionDate || new Date().toISOString().split("T")[0];
+  const posyanduName = session.role === "admin" ? result.posyanduName || "Plamboyan 1" : session.posyanduName;
 
   return [
+    posyanduName,
     sessionDate,
     result.nikAnak || null,
     result.namaAnak,
@@ -30,9 +114,9 @@ function buildInsertParams(result) {
     result.tanggalLahir,
     result.ageFormatted,
     result.ageMonths ?? null,
-    result.berat,
-    result.tinggi,
-    result.imt ?? null,
+    Number(result.berat.toFixed(2)),
+    Number(result.tinggi.toFixed(2)),
+    result.imt == null ? null : Number(result.imt.toFixed(2)),
     isStunted,
     stuntingConclusion,
     result.wfa.z,
@@ -49,6 +133,7 @@ function buildInsertParams(result) {
     result.bmifa.level,
     JSON.stringify({
       ...result,
+      posyanduName,
       sessionDate,
       isStunted,
       stuntingConclusion,
@@ -57,44 +142,100 @@ function buildInsertParams(result) {
 }
 
 function requireAuth() {
-  if (!isAuthenticated(cookies())) {
-    return NextResponse.json({ error: "Anda harus login untuk mengakses histori kalkulator." }, { status: 401 });
+  const session = getAuthSession(cookies());
+
+  if (!session) {
+    return { error: NextResponse.json({ error: "Anda harus login untuk mengakses histori kalkulator." }, { status: 401 }) };
   }
 
-  return null;
+  return { session };
 }
 
 export async function GET(request) {
-  const authError = requireAuth();
-  if (authError) return authError;
+  const auth = requireAuth();
+  if (auth.error) return auth.error;
 
   try {
     await ensureNutritionHistoryTable();
     const { searchParams } = new URL(request.url);
     const sessionDate = searchParams.get("sessionDate");
+    const month = searchParams.get("month");
     const scope = searchParams.get("scope");
+    const isAdmin = auth.session.role === "admin";
+    const posyanduName = auth.session.posyanduName;
     const { rows } = scope === "all"
-      ? await query(`
-          SELECT id, session_date, result_json, created_at
-          FROM nutrition_histories
-          ORDER BY created_at DESC
-        `)
-      : sessionDate
-      ? await query(
-          `
-            SELECT id, session_date, result_json, created_at
+      ? isAdmin
+        ? await query(`
+            SELECT id, posyandu_name, session_date, result_json, created_at
             FROM nutrition_histories
-            WHERE session_date = $1
             ORDER BY created_at DESC
-          `,
-          [sessionDate],
-        )
-      : await query(`
-          SELECT id, session_date, result_json, created_at
-          FROM nutrition_histories
-          ORDER BY created_at DESC
-          LIMIT 100
-        `);
+          `)
+        : await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE posyandu_name = $1
+              ORDER BY created_at DESC
+            `,
+            [posyanduName],
+          )
+      : month
+      ? isAdmin
+        ? await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE session_date >= $1 AND session_date < $2
+              ORDER BY session_date DESC, created_at DESC
+            `,
+            [getMonthRange(month).startDate, getMonthRange(month).nextMonth],
+          )
+        : await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE posyandu_name = $1 AND session_date >= $2 AND session_date < $3
+              ORDER BY session_date DESC, created_at DESC
+            `,
+            [posyanduName, getMonthRange(month).startDate, getMonthRange(month).nextMonth],
+          )
+      : sessionDate
+      ? isAdmin
+        ? await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE session_date = $1
+              ORDER BY created_at DESC
+            `,
+            [sessionDate],
+          )
+        : await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE posyandu_name = $1 AND session_date = $2
+              ORDER BY created_at DESC
+            `,
+            [posyanduName, sessionDate],
+          )
+      : isAdmin
+        ? await query(`
+            SELECT id, posyandu_name, session_date, result_json, created_at
+            FROM nutrition_histories
+            ORDER BY created_at DESC
+            LIMIT 100
+          `)
+        : await query(
+            `
+              SELECT id, posyandu_name, session_date, result_json, created_at
+              FROM nutrition_histories
+              WHERE posyandu_name = $1
+              ORDER BY created_at DESC
+              LIMIT 100
+            `,
+            [posyanduName],
+          );
 
     return NextResponse.json({ data: rows.map(normalizeHistoryRow) });
   } catch (error) {
@@ -103,21 +244,22 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const authError = requireAuth();
-  if (authError) return authError;
+  const auth = requireAuth();
+  if (auth.error) return auth.error;
 
   try {
-    const result = await request.json();
+    const result = normalizeResult(await request.json());
 
     if (!result?.namaAnak || !result?.jenisKelamin || !result?.tanggalLahir || !result?.berat || !result?.tinggi) {
       return NextResponse.json({ error: "Data hasil kalkulator tidak lengkap." }, { status: 400 });
     }
 
     await ensureNutritionHistoryTable();
-    const { rows } = await query(
+    const insertResult = await query(
       `
         INSERT INTO nutrition_histories (
           session_date,
+          posyandu_name,
           nik_anak,
           nama_anak,
           nik_ibu,
@@ -146,38 +288,29 @@ export async function POST(request) {
           result_json
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+          $2, $1, $3, $4, $5, $6, $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-          $21, $22, $23, $24, $25, $26, $27::jsonb
+          $21, $22, $23, $24, $25, $26, $27, $28
         )
-        RETURNING id, session_date, result_json, created_at
       `,
-      buildInsertParams(result),
+      buildInsertParams(result, auth.session),
+    );
+    const { rows: insertedRows } = await query(
+      `
+        SELECT id, posyandu_name, session_date, result_json, created_at
+        FROM nutrition_histories
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [insertResult.insertId],
     );
 
-    return NextResponse.json({ data: normalizeHistoryRow(rows[0]) }, { status: 201 });
+    return NextResponse.json({ data: normalizeHistoryRow(insertedRows[0]) }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function DELETE(request) {
-  const authError = requireAuth();
-  if (authError) return authError;
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const sessionDate = searchParams.get("sessionDate");
-
-    if (!sessionDate) {
-      return NextResponse.json({ error: "Tanggal sesi wajib dipilih untuk menghapus histori." }, { status: 400 });
-    }
-
-    await ensureNutritionHistoryTable();
-    await query("DELETE FROM nutrition_histories WHERE session_date = $1", [sessionDate]);
-
-    return NextResponse.json({ data: [] });
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  return NextResponse.json({ error: "Fitur hapus data dinonaktifkan." }, { status: 405 });
 }

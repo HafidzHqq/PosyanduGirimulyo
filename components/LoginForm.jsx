@@ -7,6 +7,7 @@ export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,6 +28,7 @@ export default function LoginForm() {
         throw new Error(payload.error || "Login gagal.");
       }
 
+      window.dispatchEvent(new Event("posyandu-auth-change"));
       router.refresh();
     } catch (loginError) {
       setError(loginError.message);
@@ -43,7 +45,7 @@ export default function LoginForm() {
         </div>
         <h1 className="text-2xl font-bold text-ink">Login Kalkulator</h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Masuk untuk mengakses kalkulator dan histori data Posyandu Girimulyo.
+          Masuk sesuai lokasi Plamboyan agar data tersimpan di tempat yang benar.
         </p>
       </div>
 
@@ -58,6 +60,7 @@ export default function LoginForm() {
             autoComplete="email"
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15"
             id="email"
+            placeholder="admin@posyandu.com"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -68,14 +71,25 @@ export default function LoginForm() {
           <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="password">
             Password
           </label>
-          <input
-            autoComplete="current-password"
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15"
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <div className="relative">
+            <input
+              autoComplete="current-password"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-800 outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15"
+              id="password"
+              placeholder="Masukkan password"
+              type={isPasswordVisible ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <button
+              aria-label={isPasswordVisible ? "Sembunyikan password" : "Tampilkan password"}
+              className="absolute right-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-primary focus:outline-none focus:ring-4 focus:ring-primary/15"
+              type="button"
+              onClick={() => setIsPasswordVisible((current) => !current)}
+            >
+              <i className={`fa-solid ${isPasswordVisible ? "fa-eye-slash" : "fa-eye"}`} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         <button
@@ -87,6 +101,10 @@ export default function LoginForm() {
           {isLoading ? "Memproses..." : "Login"}
         </button>
       </form>
+
+      <p className="mt-5 text-center text-xs leading-6 text-slate-500">
+        Gunakan akun yang sudah diberikan kepada kader masing-masing Plamboyan.
+      </p>
     </main>
   );
 }

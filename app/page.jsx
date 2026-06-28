@@ -9,7 +9,7 @@ export const metadata = {
 export default function HomePage() {
   return (
     <SiteShell>
-      <InfoPage page={infoPages.home} headingLevel="h1" />
+      <InfoPage page={infoPages.home} headingLevel="h1" heroImage="/page.png" />
     </SiteShell>
   );
 }

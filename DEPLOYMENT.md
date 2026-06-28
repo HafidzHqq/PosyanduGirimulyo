@@ -1,57 +1,51 @@
-# Deploy Posyandu Girimulyo
+# Deploy Posyandu Girimulyo di Hostinger
 
-## 1. Supabase
+## Kebutuhan Hosting
 
-1. Buat project baru di Supabase.
-2. Login CLI:
+Project ini adalah Next.js dengan API route untuk login dan histori kalkulator, jadi hosting harus mendukung Node.js. Paket shared hosting biasa yang hanya PHP/static tidak cukup.
 
-```bash
-npx supabase login
-```
+Gunakan paket Hostinger yang menyediakan:
 
-3. Link project:
+- Managed Node.js atau fitur deploy aplikasi Node.js.
+- MariaDB/MySQL database.
+- Environment variables.
+- Perintah build dan start.
 
-```bash
-npx supabase link --project-ref PROJECT_REF_SUPABASE
-```
+## Environment Variables
 
-4. Jalankan migration tabel histori:
+Isi environment berikut di panel hosting:
 
 ```bash
-npx supabase db push
+MARIADB_HOST="host_database"
+MARIADB_PORT="3306"
+MARIADB_USER="user_database"
+MARIADB_PASSWORD="password_database"
+MARIADB_DATABASE="nama_database"
+MARIADB_CONNECTION_LIMIT="5"
 ```
 
-5. Ambil PostgreSQL connection string dari Supabase, lalu gunakan sebagai `DATABASE_URL`.
+Jangan commit `.env.local`.
 
-## 2. Vercel
+## Database
 
-1. Login CLI:
+Import file `database.sql` ke database MariaDB melalui phpMyAdmin atau tool database Hostinger.
+
+Aplikasi juga akan mencoba membuat/melengkapi tabel otomatis saat API histori dipakai, tetapi import `database.sql` lebih jelas untuk setup pertama.
+
+## Build dan Start
+
+Gunakan perintah:
 
 ```bash
-npx vercel login
+npm install
+npm run build
+npm run start
 ```
 
-2. Set environment variable production:
-
-```bash
-npx vercel env add DATABASE_URL production
-npx vercel env add DATABASE_SSL production
-```
-
-Isi:
-
-```bash
-DATABASE_SSL=true
-```
-
-3. Deploy production:
-
-```bash
-npx vercel --prod
-```
+Pastikan versi Node.js di hosting kompatibel dengan Next.js 14. Gunakan Node.js 20 LTS atau 22 LTS bila tersedia.
 
 ## Catatan
 
-- Gunakan connection string Supabase PostgreSQL yang menyertakan password database.
-- Jangan commit `.env.local`.
-- File migration ada di `supabase/migrations/`.
+- Aplikasi tidak lagi memakai Supabase/PostgreSQL.
+- Histori kalkulator disimpan di tabel `nutrition_histories`.
+- Akun login tetap hardcoded di aplikasi, bukan di database.
