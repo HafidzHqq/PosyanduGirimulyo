@@ -22,9 +22,12 @@ MARIADB_USER="user_database"
 MARIADB_PASSWORD="password_database"
 MARIADB_DATABASE="nama_database"
 MARIADB_CONNECTION_LIMIT="5"
+AUTH_SECRET="isi_random_secret_panjang_minimal_32_karakter"
 ```
 
 Jangan commit `.env.local`.
+
+`AUTH_SECRET` digunakan untuk menandatangani cookie login. Di production, variabel ini wajib diisi agar session tidak mudah dipalsukan.
 
 ## Database
 

@@ -1,15 +1,9 @@
-import InfoPage from "@/components/InfoPage";
-import SiteShell from "@/components/SiteShell";
-import { infoPages } from "@/lib/pages";
+import PublicInfoApp from "@/components/PublicInfoApp";
 
 export const metadata = {
   title: "Posyandu Girimulyo - Homepage",
 };
 
 export default function HomePage() {
-  return (
-    <SiteShell>
-      <InfoPage page={infoPages.home} headingLevel="h1" heroImage="/page.png" />
-    </SiteShell>
-  );
+  return <PublicInfoApp />;
 }

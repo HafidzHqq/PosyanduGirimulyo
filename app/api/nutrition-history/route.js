@@ -77,9 +77,27 @@ function getMonthRange(monthValue) {
 }
 
 function normalizeResult(result) {
+  const hasNumber = /\d/;
+  const nikPattern = /^\d{16}$/;
   const berat = parseDecimalValue(result.berat);
   const tinggi = parseDecimalValue(result.tinggi);
   const imt = result.imt == null ? null : parseDecimalValue(result.imt);
+
+  if (!result.namaAnak || hasNumber.test(result.namaAnak)) {
+    throw new Error("Nama anak wajib diisi dan tidak boleh berisi angka.");
+  }
+
+  if (result.namaIbu && hasNumber.test(result.namaIbu)) {
+    throw new Error("Nama ibu tidak boleh berisi angka.");
+  }
+
+  if (result.nikAnak && !nikPattern.test(result.nikAnak)) {
+    throw new Error("NIK anak harus berisi angka saja dan tepat 16 digit.");
+  }
+
+  if (result.nikIbu && !nikPattern.test(result.nikIbu)) {
+    throw new Error("NIK ibu harus berisi angka saja dan tepat 16 digit.");
+  }
 
   if (!Number.isFinite(berat) || berat <= 0 || berat > 300) {
     throw new Error("Berat badan harus berupa angka valid.");
@@ -149,6 +167,21 @@ function requireAuth() {
   }
 
   return { session };
+}
+
+function getPublicError(error) {
+  if (error instanceof Error && (
+    error.message.includes("valid")
+    || error.message.includes("wajib")
+    || error.message.includes("tidak boleh")
+    || error.message.includes("NIK")
+    || error.message.includes("Tanggal")
+    || error.message.includes("Format bulan")
+  )) {
+    return error.message;
+  }
+
+  return "Terjadi kesalahan pada server. Silakan coba lagi.";
 }
 
 export async function GET(request) {
@@ -239,7 +272,8 @@ export async function GET(request) {
 
     return NextResponse.json({ data: rows.map(normalizeHistoryRow) });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Gagal mengambil histori kalkulator:", error);
+    return NextResponse.json({ error: getPublicError(error) }, { status: 500 });
   }
 }
 
@@ -307,7 +341,8 @@ export async function POST(request) {
 
     return NextResponse.json({ data: normalizeHistoryRow(insertedRows[0]) }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Gagal menyimpan histori kalkulator:", error);
+    return NextResponse.json({ error: getPublicError(error) }, { status: 500 });
   }
 }
 

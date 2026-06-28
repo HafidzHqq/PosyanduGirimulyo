@@ -10,6 +10,7 @@ export default function PillNav({
   logoAlt = "Logo",
   items,
   activeHref,
+  activePublicPage = "home",
   className = "",
   ease = "power3.out",
   baseColor = "#1D9E75",
@@ -195,6 +196,44 @@ export default function PillNav({
     return href === "/" ? activeHref === "/" : activeHref.startsWith(href);
   }
 
+  function isActiveItem(item) {
+    if (item.publicTab) {
+      return activeHref === "/" && activePublicPage === item.pageKey;
+    }
+
+    return isActiveHref(item.href);
+  }
+
+  function handleItemClick(event, item) {
+    setIsMobileMenuOpen(false);
+
+    if (!item.publicTab) return;
+
+    if (activeHref === "/") {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent("posyandu-public-page-change", {
+        detail: { pageKey: item.pageKey },
+      }));
+      return;
+    }
+
+    window.sessionStorage.setItem("posyandu-public-page", item.pageKey);
+  }
+
+  function handleLogoClick(event) {
+    setIsMobileMenuOpen(false);
+
+    if (activeHref === "/") {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent("posyandu-public-page-change", {
+        detail: { pageKey: "home" },
+      }));
+      return;
+    }
+
+    window.sessionStorage.setItem("posyandu-public-page", "home");
+  }
+
   const cssVars = {
     "--base": baseColor,
     "--base-gradient": baseGradient,
@@ -221,7 +260,7 @@ export default function PillNav({
           href="/"
           ref={logoRef}
           onMouseEnter={handleLogoEnter}
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={handleLogoClick}
         >
           <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
             <Image
@@ -254,7 +293,7 @@ export default function PillNav({
           >
             <ul className="m-0 flex h-full list-none items-stretch p-0" role="menubar" style={{ gap: "var(--pill-gap)" }}>
               {primaryItems.map((item, index) => {
-                const isActive = isActiveHref(item.href);
+                const isActive = isActiveItem(item);
                 const pillStyle = {
                   background: isActive ? "var(--base-gradient)" : "transparent",
                   color: isActive ? "var(--hover-text)" : "var(--pill-text)",
@@ -272,6 +311,7 @@ export default function PillNav({
                       style={pillStyle}
                       onMouseEnter={() => handleEnter(index)}
                       onMouseLeave={() => handleLeave(index)}
+                      onClick={(event) => handleItemClick(event, item)}
                     >
                       <span
                         aria-hidden="true"
@@ -345,7 +385,7 @@ export default function PillNav({
       >
         <ul className="m-0 flex list-none flex-col gap-[3px] p-[3px]">
           {[...primaryItems, ...(isAuthLoaded && !isAuthenticated ? [loginItem] : [])].map((item) => {
-            const isActive = isActiveHref(item.href);
+            const isActive = isActiveItem(item);
 
             return (
               <li key={item.href}>
@@ -356,7 +396,7 @@ export default function PillNav({
                     background: isActive ? "var(--base-gradient)" : "var(--pill-bg)",
                     color: isActive ? "var(--hover-text)" : "var(--pill-text)",
                   }}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={(event) => handleItemClick(event, item)}
                 >
                   {item.icon && <i className={`fa-solid ${item.icon} mr-2`} aria-hidden="true" />}
                   {item.label}

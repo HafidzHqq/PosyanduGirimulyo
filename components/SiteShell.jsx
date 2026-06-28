@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/pages";
 import PillNav from "@/components/navbar";
 
-export default function SiteShell({ children }) {
+export default function SiteShell({ activePublicPage = "home", children }) {
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = useState(null);
 
@@ -45,6 +45,7 @@ export default function SiteShell({ children }) {
         ease="power2.out"
         hoveredPillTextColor="#ffffff"
         initialLoadAnimation={false}
+        activePublicPage={activePublicPage}
         isAuthenticated={isAuthenticated}
         items={navItems}
         logo="/logo.webp"
