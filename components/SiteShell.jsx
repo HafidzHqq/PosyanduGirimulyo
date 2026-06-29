@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/pages";
 import PillNav from "@/components/navbar";
+import { readJsonResponse } from "@/lib/http";
 
 export default function SiteShell({ activePublicPage = "home", children }) {
   const pathname = usePathname();
@@ -15,7 +16,7 @@ export default function SiteShell({ activePublicPage = "home", children }) {
     async function loadSession() {
       try {
         const response = await fetch("/api/session", { cache: "no-store" });
-        const payload = await response.json();
+        const payload = await readJsonResponse(response, "Respons session dari server tidak valid.");
 
         if (isMounted) {
           setIsAuthenticated(Boolean(payload.authenticated));

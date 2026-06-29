@@ -45,7 +45,7 @@ npm run build
 npm run start
 ```
 
-Pastikan versi Node.js di hosting kompatibel dengan Next.js 14. Gunakan Node.js 20 LTS atau 22 LTS bila tersedia.
+Pastikan versi Node.js di hosting memakai Node.js 20 LTS. Project ini sudah menetapkan `engines.node` ke `20.x` dan menyediakan `.nvmrc`.
 
 ## Catatan
 

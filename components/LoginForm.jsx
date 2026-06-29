@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { readJsonResponse } from "@/lib/http";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse(response, "Respons login dari server tidak valid.");
 
       if (!response.ok) {
         throw new Error(payload.error || "Login gagal.");

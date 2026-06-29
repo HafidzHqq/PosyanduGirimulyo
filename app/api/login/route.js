@@ -40,30 +40,39 @@ function recordFailedAttempt(key) {
 }
 
 export async function POST(request) {
-  const { email, password } = await request.json();
-  const attemptKey = getAttemptKey(request, email);
+  try {
+    const { email, password } = await request.json();
+    const attemptKey = getAttemptKey(request, email);
 
-  if (isRateLimited(attemptKey)) {
-    return NextResponse.json({ error: "Terlalu banyak percobaan login. Coba lagi beberapa menit lagi." }, { status: 429 });
+    if (isRateLimited(attemptKey)) {
+      return NextResponse.json({ error: "Terlalu banyak percobaan login. Coba lagi beberapa menit lagi." }, { status: 429 });
+    }
+
+    const account = findAccount(email, password);
+
+    if (!account) {
+      recordFailedAttempt(attemptKey);
+      return NextResponse.json({ error: "Email atau password salah." }, { status: 401 });
+    }
+
+    loginAttempts.delete(attemptKey);
+
+    const response = NextResponse.json({ ok: true, account: { label: account.label, role: account.role } });
+    response.cookies.set(AUTH_COOKIE, createAuthCookieValue(account), {
+      httpOnly: true,
+      maxAge: AUTH_MAX_AGE_SECONDS,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    return response;
+  } catch (error) {
+    console.error("Gagal login:", error);
+
+    return NextResponse.json(
+      { error: "Login belum dapat diproses. Periksa konfigurasi server." },
+      { status: 500 },
+    );
   }
-
-  const account = findAccount(email, password);
-
-  if (!account) {
-    recordFailedAttempt(attemptKey);
-    return NextResponse.json({ error: "Email atau password salah." }, { status: 401 });
-  }
-
-  loginAttempts.delete(attemptKey);
-
-  const response = NextResponse.json({ ok: true, account: { label: account.label, role: account.role } });
-  response.cookies.set(AUTH_COOKIE, createAuthCookieValue(account), {
-    httpOnly: true,
-    maxAge: AUTH_MAX_AGE_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
-
-  return response;
 }
