@@ -15,7 +15,16 @@ function copyRecursiveSync(src, dest) {
   }
 }
 
-console.log("Menyalin .next/static ke _next/static untuk LiteSpeed Hostinger...");
-copyRecursiveSync(path.join('.next', 'static'), path.join('_next', 'static'));
+console.log("Menyalin public folder...");
+copyRecursiveSync('public', path.join('.next', 'standalone', 'public'));
+
+console.log("Menyalin .next/static untuk Node.js internal server...");
+copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '.next', 'static'));
+
+console.log("Menyalin .next/static untuk LiteSpeed (Root Document)...");
+copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '_next', 'static'));
+
+console.log("Menyalin .next/static untuk LiteSpeed (Public Document)...");
+copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', 'public', '_next', 'static'));
 
 console.log("Menyalin selesai!");
