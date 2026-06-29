@@ -14,11 +14,12 @@ function copyRecursiveSync(src, dest) {
   }
 }
 
-console.log("Menyalin folder .next/static ke dalam .next/standalone/.next/static (Untuk Node.js)...");
+console.log("Menyalin folder .next/static ke dalam .next/standalone/.next/static (Untuk Node.js fallback)...");
 copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '.next', 'static'));
 
-console.log("Menyalin folder .next/static ke dalam .next/standalone/public/_next/static (Untuk Hostinger LiteSpeed)...");
-copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', 'public', '_next', 'static'));
+console.log("Menyalin folder .next/static ke dalam .next/standalone/_next/static (Untuk Hostinger LiteSpeed)...");
+copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '_next', 'static'));
+
 
 console.log("Menyalin folder public ke dalam .next/standalone/public...");
 copyRecursiveSync('public', path.join('.next', 'standalone', 'public'));
