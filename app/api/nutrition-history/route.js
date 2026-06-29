@@ -170,6 +170,33 @@ function requireAuth() {
 }
 
 function getPublicError(error) {
+  const code = error?.code || "";
+  const message = error instanceof Error ? error.message : "";
+
+  if (code === "ER_ACCESS_DENIED_ERROR") {
+    return "Akses database ditolak. Periksa MARIADB_USER dan MARIADB_PASSWORD di environment hosting.";
+  }
+
+  if (code === "ER_BAD_DB_ERROR") {
+    return "Database tidak ditemukan. Periksa MARIADB_DATABASE di environment hosting.";
+  }
+
+  if (code === "ER_DBACCESS_DENIED_ERROR" || code === "ER_TABLEACCESS_DENIED_ERROR") {
+    return "User database tidak punya akses ke database/tabel. Periksa permission user MySQL di Hostinger.";
+  }
+
+  if (code === "ENOTFOUND" || code === "ECONNREFUSED" || code === "ETIMEDOUT") {
+    return "Server database tidak bisa dihubungi. Periksa MARIADB_HOST dan MARIADB_PORT.";
+  }
+
+  if (code === "ER_NO_SUCH_TABLE") {
+    return "Tabel histori belum ada. Import database.sql ke phpMyAdmin atau pastikan user database boleh membuat tabel.";
+  }
+
+  if (message.includes("Konfigurasi MariaDB belum lengkap")) {
+    return "Konfigurasi MariaDB belum lengkap. Isi MARIADB_HOST, MARIADB_USER, MARIADB_PASSWORD, dan MARIADB_DATABASE di environment hosting.";
+  }
+
   if (error instanceof Error && (
     error.message.includes("valid")
     || error.message.includes("wajib")
