@@ -15,16 +15,12 @@ function copyRecursiveSync(src, dest) {
   }
 }
 
-console.log("Memulai proses penyalinan aset statis untuk LiteSpeed Hostinger...");
+console.log("Menyalin aset statis ke document root untuk LiteSpeed Hostinger...");
 
-// 1. Copy ke _next/static (Untuk Document Root standar)
-const dest1 = path.join('_next', 'static');
-console.log(`Menyalin ke ${dest1}...`);
-copyRecursiveSync(path.join('.next', 'static'), dest1);
+// Copy .next/static → _next/static di root
+// Supaya LiteSpeed bisa serve /_next/static/* langsung dari filesystem
+const dest = path.join('_next', 'static');
+copyRecursiveSync(path.join('.next', 'static'), dest);
 
-// 2. Copy ke public/_next/static (Untuk Document Root public)
-const dest2 = path.join('public', '_next', 'static');
-console.log(`Menyalin ke ${dest2}...`);
-copyRecursiveSync(path.join('.next', 'static'), dest2);
+console.log("Selesai: aset statis tersedia di _next/static/");
 
-console.log("Menyalin selesai!");
