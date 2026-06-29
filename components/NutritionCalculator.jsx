@@ -16,8 +16,6 @@ const initialForm = {
   tinggi: "",
 };
 
-const posyanduOptions = Array.from({ length: 6 }, (_, index) => `Plamboyan ${index + 1}`);
-
 function getTodayDate() {
   return new Date().toISOString().split("T")[0];
 }
@@ -326,7 +324,7 @@ function validateFormData(formData) {
 export default function NutritionCalculator({ session }) {
   const [formData, setFormData] = useState(initialForm);
   const [selectedSessionDate, setSelectedSessionDate] = useState(getTodayDate);
-  const [selectedPosyandu, setSelectedPosyandu] = useState(session?.role === "admin" ? "Plamboyan 1" : session?.posyanduName || "Plamboyan 1");
+  const activePosyandu = session?.posyanduName || "Plamboyan";
   const [selectedHistoryMonth, setSelectedHistoryMonth] = useState(getCurrentMonth);
   const [historyScope, setHistoryScope] = useState("month");
   const [historySearch, setHistorySearch] = useState("");
@@ -421,10 +419,6 @@ export default function NutritionCalculator({ session }) {
     setSelectedSessionDate(event.target.value);
   }
 
-  function changeSelectedPosyandu(event) {
-    setSelectedPosyandu(event.target.value);
-  }
-
   async function changeHistoryMonth(event) {
     const nextHistoryMonth = event.target.value;
     setSelectedHistoryMonth(nextHistoryMonth);
@@ -493,7 +487,7 @@ export default function NutritionCalculator({ session }) {
     try {
       const result = calculateNutritionResult({
         ...formData,
-        posyanduName: selectedPosyandu,
+        posyanduName: activePosyandu,
         sessionDate: selectedSessionDate,
         berat: parseDecimalInput(formData.berat),
         tinggi: parseDecimalInput(formData.tinggi),
@@ -640,7 +634,7 @@ export default function NutritionCalculator({ session }) {
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
-            <CalculatorStat icon="fa-location-dot" label="Lokasi" value={session?.role === "admin" ? "Plamboyan" : selectedPosyandu} />
+            <CalculatorStat icon="fa-location-dot" label="Lokasi" value={activePosyandu} />
             <CalculatorStat icon="fa-calendar-days" label="Sesi" value={formatDisplayDate(selectedSessionDate)} />
             <CalculatorStat icon="fa-database" label="Histori" value={hasLoadedHistory ? `${reportData.length} data` : "Siap"} />
           </div>
@@ -653,7 +647,7 @@ export default function NutritionCalculator({ session }) {
 
       <form className="grid gap-5" noValidate onSubmit={handleSubmit}>
         <FormSection
-          description="Pilih tanggal sesi dan tempat Posyandu sebelum memasukkan data anak."
+          description="Pilih tanggal sesi sebelum memasukkan data anak. Lokasi data mengikuti akun login."
           icon="fa-calendar-check"
           title="Sesi Pemeriksaan"
         >
@@ -667,21 +661,6 @@ export default function NutritionCalculator({ session }) {
               value={selectedSessionDate}
               onChange={changeSessionDate}
             />
-          </div>
-
-          <div>
-            <label className={labelClass} htmlFor="posyanduName">Tempat Posyandu</label>
-            {session?.role === "admin" ? (
-              <select className={fieldClass} id="posyanduName" value={selectedPosyandu} onChange={changeSelectedPosyandu}>
-                {posyanduOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="rounded-xl border border-primary/15 bg-primaryLight/25 px-4 py-3 font-semibold text-primary">
-                {selectedPosyandu}
-              </div>
-            )}
           </div>
         </div>
         </FormSection>
