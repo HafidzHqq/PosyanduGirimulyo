@@ -189,6 +189,10 @@ function getPublicError(error) {
     return "Server database tidak bisa dihubungi. Periksa MARIADB_HOST dan MARIADB_PORT.";
   }
 
+  if (code === 45028 || code === "45028" || message.includes("pool failed to retrieve a connection")) {
+    return "Koneksi database timeout. Periksa MARIADB_HOST, MARIADB_PORT, dan pastikan host database bisa diakses dari aplikasi Node.js.";
+  }
+
   if (code === "ER_NO_SUCH_TABLE") {
     return "Tabel histori belum ada. Import database.sql ke phpMyAdmin atau pastikan user database boleh membuat tabel.";
   }
