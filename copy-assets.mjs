@@ -1,10 +1,11 @@
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = require('path');
 
 function copyRecursiveSync(src, dest) {
-  if (!fs.existsSync(src)) return;
-  const stats = fs.statSync(src);
-  if (stats.isDirectory()) {
+  const exists = fs.existsSync(src);
+  const stats = exists && fs.statSync(src);
+  const isDirectory = exists && stats.isDirectory();
+  if (isDirectory) {
     if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
     fs.readdirSync(src).forEach(file => {
       copyRecursiveSync(path.join(src, file), path.join(dest, file));
@@ -14,14 +15,7 @@ function copyRecursiveSync(src, dest) {
   }
 }
 
-console.log("Menyalin folder .next/static ke dalam .next/standalone/.next/static (Untuk Node.js fallback)...");
-copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '.next', 'static'));
+console.log("Menyalin .next/static ke _next/static untuk LiteSpeed Hostinger...");
+copyRecursiveSync(path.join('.next', 'static'), path.join('_next', 'static'));
 
-console.log("Menyalin folder .next/static ke dalam .next/standalone/_next/static (Untuk Hostinger LiteSpeed)...");
-copyRecursiveSync(path.join('.next', 'static'), path.join('.next', 'standalone', '_next', 'static'));
-
-
-console.log("Menyalin folder public ke dalam .next/standalone/public...");
-copyRecursiveSync('public', path.join('.next', 'standalone', 'public'));
-
-console.log("Berhasil menyalin file statis untuk deployment Hostinger!");
+console.log("Menyalin selesai!");
