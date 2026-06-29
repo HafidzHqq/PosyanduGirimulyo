@@ -302,7 +302,7 @@ export default function PillNav({
                 };
 
                 return (
-                  <li className="flex h-full" key={item.href} role="none">
+                  <li className="flex h-full" key={item.pageKey ?? item.href} role="none">
                     <Link
                       aria-label={item.ariaLabel || item.label}
                       className="relative inline-flex h-full cursor-pointer items-center justify-center overflow-hidden rounded-full px-0 text-sm font-semibold leading-none no-underline outline-none transition focus:ring-4 focus:ring-primary/20"
@@ -388,7 +388,7 @@ export default function PillNav({
             const isActive = isActiveItem(item);
 
             return (
-              <li key={item.href}>
+              <li key={item.pageKey ?? item.href}>
                 <Link
                   className="block rounded-[50px] px-4 py-3 text-sm font-semibold no-underline transition"
                   href={item.href}
